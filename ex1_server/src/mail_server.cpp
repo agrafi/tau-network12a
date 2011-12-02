@@ -38,7 +38,7 @@ void ReadUsersFile(string path)
 
 void StartListeningServer(unsigned short port)
 {
-	if ((server_s.fd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
+	if ((server_s.server_fd = socket(AF_INET, SOCK_STREAM, 0)) == -1)
 	{
 		cout << "Could not initialize socket. Aborting." << endl;
 		return;
@@ -49,11 +49,27 @@ void StartListeningServer(unsigned short port)
 	server_s.sin.sin_addr.s_addr = INADDR_ANY;
 	server_s.sin.sin_family = AF_INET;
 
-	if (bind(server_s.fd, (struct sockaddr *)&server_s.sin,sizeof(struct sockaddr_in) ) == -1)
+	if (bind(server_s.server_fd, (struct sockaddr *)&server_s.sin,sizeof(struct sockaddr_in) ) == -1)
 	{
 	    cout << "Error binding socket to port " << port << ". Aborting." << endl;
 	    return;
 	}
+
+	if (listen(server_s.server_fd, 10) == -1)
+	{
+	    cout << "Error while trying to listen(). Aborting." << endl;
+	    return;
+	}
+
+    // Server blocks on this call until a client tries to establish connection.
+    // When a connection is established, it returns a 'connected socket descriptor' different
+    // from the one created earlier.
+	socklen_t size = sizeof(server_s.client_addr);
+    server_s.client_fd = accept(server_s.server_fd, (struct sockaddr *)&server_s.client_addr, &size);
+    if (server_s.client_fd == -1)
+    	printf("Failed accepting connection\n");
+    else
+    	printf("Connected\n");
 
 	return;
 }

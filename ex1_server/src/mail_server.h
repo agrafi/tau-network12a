@@ -56,9 +56,10 @@ struct message_t
 // Server structure
 struct server_t
 {
-	int fd;
+	int server_fd;
+	int client_fd;
 	struct sockaddr_in sin;
-
+    struct sockaddr_in client_addr;
 } server;
 
 
