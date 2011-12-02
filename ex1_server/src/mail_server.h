@@ -11,6 +11,7 @@
 
 #include <string>
 #include <list>
+#include <map>
 #include <iostream>
 #include <fstream>
 #include <arpa/inet.h>
@@ -20,51 +21,57 @@
 #include <signal.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include "protocol.h"
 
 using namespace std;
 
 #define MAX_LINE 1024
 
 // Attachment structure
-struct attachment_t
+typedef struct
 {
 	string filename;
 	void* data;
 } attachment;
 
 // Forward declaration
-struct message_t;
+struct message;
+typedef map <unsigned int, message*> message_pool;
 
 // User structure
-struct user_t {
+typedef struct {
 	string username;
 	string password;
-	list <message_t> messages;
+	message_pool messages;
+	unsigned int next_msg_id;
 } user;
 
 // Message structure
-struct message_t
+typedef struct message
 {
+	unsigned int id;
 	string from;
-	list <user_t> to;
+	list <user*> to;
 	string subject;
-	list <attachment_t> attachments;
+	list <attachment*> attachments;
 	string body;
-} message;
+} message_t;
 
 
 // Server structure
-struct server_t
+typedef struct
 {
 	int server_fd;
 	int client_fd;
 	struct sockaddr_in sin;
     struct sockaddr_in client_addr;
+    user* current_user;
 } server;
 
 
 // Globals
-list <user_t> users_list;
-server_t server_s;
+typedef map <string,user*> users_db;
+users_db users_map;
+server server_s;
 
 #endif /* MAIL_SERVER_H_ */

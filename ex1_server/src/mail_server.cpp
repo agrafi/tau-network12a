@@ -15,6 +15,106 @@
 
 using namespace std;
 
+string MessageSummary(message* m)
+{
+	std::stringstream ret;
+	ret << m->id << " ";
+	ret << m->from << " ";
+	ret << "\"" << m->subject << "\" ";
+	ret << m->attachments.size() << endl;
+	return ret.str();
+}
+
+void ShowInbox(int fd, user* u)
+{
+	message_pool::iterator listiterator;
+	for(listiterator = u->messages.begin();
+			listiterator != u->messages.end();
+			listiterator++)
+	{
+		string summary = MessageSummary(listiterator->second);
+		send(fd, summary.c_str(), summary.size(), 0);
+	}
+	return;
+}
+
+char GetNextMessage(int fd)
+{
+	char ret;
+	read(fd, &ret, sizeof(msg_code));
+	return ret;
+}
+
+int Login()
+{
+	string greeting = "‫.‪Welcome! I am simple-mail-server‬‬";
+	string username = "";
+	string password = "";
+
+	if (-1 == SendLineToSocket(server_s.client_fd, greeting))
+		return 1;
+	string line = RecvLineFromSocket(server_s.client_fd);
+
+    std::stringstream   linestream(line);
+    std::getline(linestream, username, ' ');  // read up-to the first space
+    std::getline(linestream, password, ' ');  // read up-to the second space
+
+	users_db::iterator listiterator;
+	for(listiterator = users_map.begin();
+			listiterator != users_map.end();
+			listiterator++)
+	{
+		if ((listiterator->first == username) && (listiterator->second->password == password))
+		{
+			// found a match
+			if (-1 == SendLineToSocket(server_s.client_fd, "Connected to server"))
+				return 1;
+			server_s.current_user = listiterator->second;
+			return 0;
+		}
+	}
+	return 0;
+}
+
+void HandleClient()
+{
+	char quit = 0;
+	char code;
+
+	if (-1 == Login())
+		return;
+
+	while (!quit)
+	{
+		// parse next request
+		code = GetNextMessage(server_s.client_fd);
+		if (0 == code)
+		{
+			cout << "Malformed message. Aborting" << endl;
+			return;
+		}
+
+		switch (code)
+		{
+			case SHOW_INBOX_C:
+				ShowInbox(server_s.client_fd, server_s.current_user);
+				break;
+
+			case GET_MAIL_C:
+			case GET_ATTACHMENT_C:
+			case DELETE_MAIL_C:
+			case COMPOSE_C:
+			case QUIT_C:
+				quit = 1;
+				break;
+			default:
+				cout << "Undefined msg code " << code << endl;
+				return;
+		}
+	}
+	return;
+}
+
 void ReadUsersFile(string path)
 {
 	ifstream file(path.c_str());
@@ -22,7 +122,7 @@ void ReadUsersFile(string path)
 
 	while(std::getline(file, line))
 	{
-		user_t* u = new user_t;
+		user* u = new user;
 	    std::stringstream   linestream(line);
 
 	    // If you have truly tab delimited data use getline() with third parameter.
@@ -30,8 +130,30 @@ void ReadUsersFile(string path)
 	    // then the operator >> will do (it reads a space separated word into a string).
 	    std::getline(linestream, u->username, '\t');  // read up-to the first tab (discard tab).
 	    std::getline(linestream, u->password, '\t');  // read up-to the second tab (discard tab).
-	    users_list.push_back(*u);
+	    users_map[u->username] = u;
+	    u->next_msg_id = 1;
 	}
+
+
+	message_t *m = new message_t;
+	m->id = 1;
+	m->from = "Yossi";
+	m->subject = "Funny Pictures";
+	m->body = "How are you? Long time no see!";
+	m->to.push_front(users_map["Moshe"]);
+
+	attachment* a1 = new attachment;
+	a1->filename = "funny1.jpg";
+	a1->data = malloc(100);
+	attachment* a2 = new attachment;
+	a2->filename = "funny2.jpg";
+	a2->data = malloc(100);
+	m->attachments.push_front(a1);
+	m->attachments.push_front(a2);
+
+	user* u = users_map["Moshe"];
+	u->messages[u->next_msg_id++] = m;
+
 
 	return;
 }
@@ -70,6 +192,8 @@ void StartListeningServer(unsigned short port)
     	printf("Failed accepting connection\n");
     else
     	printf("Connected\n");
+
+	HandleClient();
 
 	return;
 }
