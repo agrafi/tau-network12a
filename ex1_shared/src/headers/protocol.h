@@ -8,10 +8,26 @@
 #ifndef PROTOCOL_H_
 #define PROTOCOL_H_
 
+#include <sys/socket.h>
+#include <unistd.h>
+#include <string>
+#include <vector>
+#include <iostream>
+#include <sstream>
+
+using namespace std;
+
 // Message code
+#define SHOW_INBOX_C '1'
+#define GET_MAIL_C '2'
+#define GET_ATTACHMENT_C '3'
+#define DELETE_MAIL_C '4'
+#define QUIT_C '5'
+#define COMPOSE_C '6'
+
 typedef enum {
 	// requests
-	SHOW_INBOX = 1,
+	SHOW_INBOX = '1',
 	GET_MAIL,
 	GET_ATTACHMENT,
 	DELETE_MAIL,
@@ -64,7 +80,7 @@ typedef struct {
 
 typedef struct {
 	unsigned int mail_id;
-	unsigned int num_of_senders;
+	unsigned int sender_len;
 	unsigned int subject_len;
 	unsigned int num_of_attachments;
 	// followed by variable length data:
@@ -81,7 +97,13 @@ typedef struct {
 	// message code
 	msg_code code;
 	// request/response total size including trailers
-	unsigned int  data_size;
+	unsigned int len;
 } raw_msg;
+
+#define MAX_LINE 1024
+
+// helper functions
+int SendLineToSocket(int fd, string str);
+string RecvLineFromSocket(int fd);
 
 #endif /* PROTOCOL_H_ */
