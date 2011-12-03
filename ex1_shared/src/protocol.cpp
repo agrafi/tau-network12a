@@ -32,15 +32,45 @@ int SendLineToSocket(int fd, string str)
 	return 0;
 }
 
-string RecvLineFromSocket(int fd)
+int RecvLineFromSocket(int fd, string* ret)
 {
 	char buffer[MAX_LINE];
-	string ret;
-	recv(fd, buffer, MAX_LINE, 0);
-	ret = buffer;
-	std::vector<std::string> x = split(ret, '\r');
-	ret = x[0];
-	x = split(ret, '\n');
-	ret = x[0];
-	return ret;
+	int nRecv = 0, nTotal = 0;
+	// init buffer
+	memset(buffer, 0, MAX_LINE);
+
+	// Read MAX_LINE chars or until newline
+	while (nTotal < MAX_LINE)
+	{
+		nRecv = recv(fd, buffer + nTotal, 1, 0);
+		if (nRecv == -1)
+		{
+			// try again
+			if (errno == EAGAIN)
+				continue;
+			// error occurred
+			perror(strerror(errno));
+			return errno;
+		}
+		if ((buffer[nTotal] == '\r') || (buffer[nTotal] == '\n'))
+		{
+			// done.
+			buffer[nTotal] = '\0';
+			break;
+		}
+		nTotal += nRecv;
+	}
+
+	*ret = buffer;
+	return 0;
 }
+
+// Using the STL
+int strtoint(string s)
+{
+  int ret;
+  std::stringstream strStream(s);
+  strStream >> ret;
+  return ret;
+}
+

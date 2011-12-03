@@ -14,6 +14,9 @@
 #include <vector>
 #include <iostream>
 #include <sstream>
+#include <string.h>
+#include <errno.h>
+#include <stdio.h>
 
 using namespace std;
 
@@ -104,6 +107,8 @@ typedef struct {
 
 // helper functions
 int SendLineToSocket(int fd, string str);
-string RecvLineFromSocket(int fd);
+int RecvLineFromSocket(int fd, string* ret);
+
+int strtoint(string s);
 
 #endif /* PROTOCOL_H_ */
