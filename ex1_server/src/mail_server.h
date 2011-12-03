@@ -31,12 +31,14 @@ using namespace std;
 typedef struct
 {
 	string filename;
+	unsigned long size;
 	void* data;
 } attachment;
 
 // Forward declaration
 struct message;
 typedef map <unsigned int, message*> message_pool;
+typedef map <unsigned int, attachment*> attachment_pool;
 
 // User structure
 typedef struct {
@@ -53,7 +55,7 @@ typedef struct message
 	string from;
 	list <user*> to;
 	string subject;
-	list <attachment*> attachments;
+	attachment_pool attachments;
 	string body;
 } message_t;
 

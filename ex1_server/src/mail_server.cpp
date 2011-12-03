@@ -10,10 +10,103 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <errno.h>
+#include <string.h>
 #include "protocol.h"
 #include "mail_server.h"
 
 using namespace std;
+
+void GetAttachment(int fd, user* u, string arguments)
+{
+	unsigned int id = 1;
+	string id_str = "";
+	unsigned int attachment_num = 1;
+	string attachment_num_str = "";
+	string attachment_path = "";
+	string formatted_message = "";
+
+    std::stringstream   linestream(arguments);
+    std::getline(linestream, id_str, ' ');  // read up-to the first space
+    std::getline(linestream, attachment_num_str, ' ');  // read up-to the second space
+    std::getline(linestream, attachment_path, '\n');  // read up-to the third space
+
+    id = strtoint(id_str);
+    attachment_num = strtoint(attachment_num_str);
+    if (u->messages.count(id) == 0)
+    {
+    	// message id does not exists, abort
+    	return;
+    }
+
+    message* m = u->messages[id];
+
+    if (m->attachments.count(attachment_num) == 0)
+    {
+    	// attachment num does not exists, abort
+    	return;
+    }
+
+	send(fd, m->attachments[attachment_num]->data, m->attachments[attachment_num]->size, 0);
+	return;
+}
+
+string FullMessage(message* m)
+{
+	std::stringstream ret;
+	ret << "From: " << m->from << endl;
+
+	ret << "To: ";
+	list <user*>::iterator usersiterator;
+	for(usersiterator = m->to.begin();
+			usersiterator != m->to.end();
+			usersiterator++)
+	{
+		if (usersiterator != m->to.begin())
+			ret << ",";
+		ret << (*usersiterator)->username;
+	}
+	ret << endl;
+
+	ret << "Subject: " << m->subject << endl;
+
+	ret << "Attachments: ";
+	attachment_pool::iterator attachmentsiterator;
+	for(attachmentsiterator = m->attachments.begin();
+			attachmentsiterator != m->attachments.end();
+			attachmentsiterator++)
+	{
+		if (attachmentsiterator != m->attachments.begin())
+			ret << ",";
+		ret << (*attachmentsiterator).second->filename;
+	}
+	ret << endl;
+
+	ret << "Text: " << m->body << endl;
+	return ret.str();
+}
+
+void GetMail(int fd, user* u, string arguments)
+{
+	unsigned int id = 1;
+	string id_str = "";
+	string formatted_message = "";
+
+    std::stringstream   linestream(arguments);
+    std::getline(linestream, id_str, ' ');  // read up-to the first space
+    std::getline(linestream, id_str, '\n');  // read up-to the second space
+
+    id = strtoint(id_str);
+    if (u->messages.count(id) == 0)
+    {
+    	// message id does not exists, abort
+    	return;
+    }
+
+	formatted_message = FullMessage(u->messages[id]);
+	send(fd, formatted_message.c_str(), formatted_message.size(), 0);
+	return;
+}
 
 string MessageSummary(message* m)
 {
@@ -25,7 +118,7 @@ string MessageSummary(message* m)
 	return ret.str();
 }
 
-void ShowInbox(int fd, user* u)
+void ShowInbox(int fd, user* u, string arguments)
 {
 	message_pool::iterator listiterator;
 	for(listiterator = u->messages.begin();
@@ -38,11 +131,17 @@ void ShowInbox(int fd, user* u)
 	return;
 }
 
-char GetNextMessage(int fd)
+char GetNextMessage(string command)
 {
-	char ret;
-	read(fd, &ret, sizeof(msg_code));
-	return ret;
+	if (command == "SHOW_INBOX")
+		return SHOW_INBOX_C;
+	if (command == "GET_MAIL")
+		return GET_MAIL_C;
+	if (command == "GET_ATTACHMENT")
+		return GET_ATTACHMENT_C;
+	if (command == "QUIT")
+		return QUIT_C;
+	return 0;
 }
 
 int Login()
@@ -53,7 +152,11 @@ int Login()
 
 	if (-1 == SendLineToSocket(server_s.client_fd, greeting))
 		return 1;
-	string line = RecvLineFromSocket(server_s.client_fd);
+
+	// parse next request
+	string line;
+	if (0 != RecvLineFromSocket(server_s.client_fd, &line))
+		return 1;
 
     std::stringstream   linestream(line);
     std::getline(linestream, username, ' ');  // read up-to the first space
@@ -80,6 +183,7 @@ void HandleClient()
 {
 	char quit = 0;
 	char code;
+	string command, arguments;
 
 	if (-1 == Login())
 		return;
@@ -87,21 +191,33 @@ void HandleClient()
 	while (!quit)
 	{
 		// parse next request
-		code = GetNextMessage(server_s.client_fd);
+		string line;
+		if (0 != RecvLineFromSocket(server_s.client_fd, &line))
+			break;
+
+	    std::stringstream   linestream(line);
+	    std::getline(linestream, command, ' ');  // read up-to the first space
+	    std::getline(linestream, arguments, '\n');  // read up-to the newline
+	    cout << "cmd " << command << endl;
+	    cout << "args " << arguments << endl;
+		code = GetNextMessage(command);
 		if (0 == code)
 		{
 			cout << "Malformed message. Aborting" << endl;
-			return;
+			continue;
 		}
 
 		switch (code)
 		{
 			case SHOW_INBOX_C:
-				ShowInbox(server_s.client_fd, server_s.current_user);
+				ShowInbox(server_s.client_fd, server_s.current_user, arguments);
 				break;
-
 			case GET_MAIL_C:
+				GetMail(server_s.client_fd, server_s.current_user, arguments);
+				break;
 			case GET_ATTACHMENT_C:
+				GetAttachment(server_s.client_fd, server_s.current_user, arguments);
+				break;
 			case DELETE_MAIL_C:
 			case COMPOSE_C:
 			case QUIT_C:
@@ -109,7 +225,7 @@ void HandleClient()
 				break;
 			default:
 				cout << "Undefined msg code " << code << endl;
-				return;
+				continue;
 		}
 	}
 	return;
@@ -134,9 +250,9 @@ void ReadUsersFile(string path)
 	    u->next_msg_id = 1;
 	}
 
-
+	user* u = users_map["Moshe"];
 	message_t *m = new message_t;
-	m->id = 1;
+	m->id = u->next_msg_id;
 	m->from = "Yossi";
 	m->subject = "Funny Pictures";
 	m->body = "How are you? Long time no see!";
@@ -144,15 +260,27 @@ void ReadUsersFile(string path)
 
 	attachment* a1 = new attachment;
 	a1->filename = "funny1.jpg";
-	a1->data = malloc(100);
+	a1->data = malloc(50000);
+	a1->size = 50000;
 	attachment* a2 = new attachment;
 	a2->filename = "funny2.jpg";
 	a2->data = malloc(100);
-	m->attachments.push_front(a1);
-	m->attachments.push_front(a2);
+	a2->size = 100;
+	m->attachments[1] = a1;
+	m->attachments[2] = a2;
 
-	user* u = users_map["Moshe"];
 	u->messages[u->next_msg_id++] = m;
+
+
+	message_t *m2 = new message_t;
+	m2->id = u->next_msg_id;
+	m2->from = "Yossi";
+	m2->subject = "Hi There!";
+	m2->body = "Just simple text";
+	m2->to.push_front(users_map["Esther"]);
+
+	user* u2 = users_map["Moshe"];
+	u2->messages[u->next_msg_id++] = m2;
 
 
 	return;
@@ -166,6 +294,10 @@ void StartListeningServer(unsigned short port)
 		return;
 	}
 
+	// For debuggind only
+	int opt = 1;
+	setsockopt(server_s.server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
 	server_s.sin.sin_port = htons(port);
 	server_s.sin.sin_addr.s_addr = 0;
 	server_s.sin.sin_addr.s_addr = INADDR_ANY;
@@ -173,13 +305,13 @@ void StartListeningServer(unsigned short port)
 
 	if (bind(server_s.server_fd, (struct sockaddr *)&server_s.sin,sizeof(struct sockaddr_in) ) == -1)
 	{
-	    cout << "Error binding socket to port " << port << ". Aborting." << endl;
+	    cout << "Error binding socket to port " << port << ". Aborting. (" << strerror(errno) << ")" << endl;
 	    return;
 	}
 
 	if (listen(server_s.server_fd, 10) == -1)
 	{
-	    cout << "Error while trying to listen(). Aborting." << endl;
+	    cout << "Error while trying to listen(). Aborting." << ". Aborting. (" << strerror(errno) << ")" << endl;
 	    return;
 	}
 
@@ -189,12 +321,14 @@ void StartListeningServer(unsigned short port)
 	socklen_t size = sizeof(server_s.client_addr);
     server_s.client_fd = accept(server_s.server_fd, (struct sockaddr *)&server_s.client_addr, &size);
     if (server_s.client_fd == -1)
-    	printf("Failed accepting connection\n");
+    	cout << "Failed accepting connection" << ". Aborting. (" << strerror(errno) << ")" << endl;
     else
-    	printf("Connected\n");
+    	cout << "Client Connected" << endl;
 
 	HandleClient();
 
+	close(server_s.client_fd);
+	close(server_s.server_fd);
 	return;
 }
 
