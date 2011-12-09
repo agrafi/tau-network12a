@@ -17,38 +17,79 @@
 
 using namespace std;
 
-void GetAttachment(int fd, user* u, string arguments)
+int Compose(int fd, user* u, raw_msg* arguments)
+{
+	return 0;
+}
+
+int DeleteMail(int fd, user* u, raw_msg* arguments)
 {
 	unsigned int id = 1;
-	string id_str = "";
-	unsigned int attachment_num = 1;
-	string attachment_num_str = "";
-	string attachment_path = "";
-	string formatted_message = "";
 
-    std::stringstream   linestream(arguments);
-    std::getline(linestream, id_str, ' ');  // read up-to the first space
-    std::getline(linestream, attachment_num_str, ' ');  // read up-to the second space
-    std::getline(linestream, attachment_path, '\n');  // read up-to the third space
-
-    id = strtoint(id_str);
-    attachment_num = strtoint(attachment_num_str);
+    id = arguments->delete_mail.mail_id;
     if (u->messages.count(id) == 0)
     {
     	// message id does not exists, abort
-    	return;
+    	return -1;
     }
 
-    message* m = u->messages[id];
+    // delete attachments from memory
+	attachment_pool::iterator attachmentsiterator;
+	for(attachmentsiterator = u->messages[id]->attachments.begin();
+			attachmentsiterator != u->messages[id]->attachments.end();
+			attachmentsiterator++)
+	{
 
-    if (m->attachments.count(attachment_num) == 0)
+		if ((*attachmentsiterator).second->data != NULL)
+			delete (*attachmentsiterator).second->data;
+	}
+	// delete message from memory
+	delete(u->messages[id]);
+
+	// remove from user inbox
+	u->messages.erase(id);
+
+	return 0;
+}
+
+
+int GetAttachment(int fd, user* u, raw_msg* arguments)
+{
+	raw_msg msg;
+
+    if (u->messages.count(arguments->get_attachment.mail_id) == 0)
     {
-    	// attachment num does not exists, abort
-    	return;
+    	// message id does not exists, abort
+    	return -1;
     }
 
-	send(fd, m->attachments[attachment_num]->data, m->attachments[attachment_num]->size, 0);
-	return;
+    message* m = u->messages[arguments->get_attachment.mail_id];
+
+    if (m->attachments.count(arguments->get_attachment.attachment_id) == 0)
+    {
+    	// attachment id does not exists, abort
+    	return -1;
+    }
+
+    msg.code = GET_ATTACHMENT_RESPONSE;
+    msg.get_attachment_response.attachment_size =
+    		m->attachments[arguments->get_attachment.attachment_id]->size;
+    msg.get_attachment_response.filename_len = m->attachments[arguments->get_attachment.attachment_id]->filename.size();
+
+	if (-1 == SendNextMessage(server_s.client_fd, &msg))
+	{
+		return -1;
+	}
+
+	if (-1 == SendDataToSocket(fd, m->attachments[arguments->get_attachment.attachment_id]->filename.c_str(),
+			msg.get_attachment_response.filename_len))
+	{
+		return -1;
+	}
+
+	cout << "Sending " << m->attachments[arguments->get_attachment.attachment_id]->size << " of data" << endl;
+    return SendDataToSocket(fd, (char*) m->attachments[arguments->get_attachment.attachment_id]->data,
+    		m->attachments[arguments->get_attachment.attachment_id]->size);
 }
 
 string FullMessage(message* m)
@@ -86,26 +127,36 @@ string FullMessage(message* m)
 	return ret.str();
 }
 
-void GetMail(int fd, user* u, string arguments)
+int GetMail(int fd, user* u, raw_msg* arguments)
 {
 	unsigned int id = 1;
-	string id_str = "";
 	string formatted_message = "";
+	raw_msg msg;
 
-    std::stringstream   linestream(arguments);
-    std::getline(linestream, id_str, ' ');  // read up-to the first space
-    std::getline(linestream, id_str, '\n');  // read up-to the second space
+	id =  arguments->get_mail.mail_id;
+    cout << "Getting mail number " << id << endl;
 
-    id = strtoint(id_str);
     if (u->messages.count(id) == 0)
     {
     	// message id does not exists, abort
-    	return;
+    	return -1;
     }
 
 	formatted_message = FullMessage(u->messages[id]);
-	send(fd, formatted_message.c_str(), formatted_message.size(), 0);
-	return;
+	msg.code = GET_MAIL_RESPONSE;
+	msg.get_mail_response.mail_len = formatted_message.size();
+
+	if (-1 == SendNextMessage(server_s.client_fd, &msg))
+	{
+		return -1;
+	}
+
+	if (-1 == SendDataToSocket(server_s.client_fd, formatted_message.c_str(), msg.get_mail_response.mail_len))
+	{
+		return -1;
+	}
+
+	return 0;
 }
 
 string MessageSummary(message* m)
@@ -118,72 +169,134 @@ string MessageSummary(message* m)
 	return ret.str();
 }
 
-void ShowInbox(int fd, user* u, string arguments)
+int ShowInbox(int fd, user* u, raw_msg* arguments)
 {
+	string summary = "";
+	raw_msg msg;
+	msg.code = SHOW_INBOX_RESPONSE;
+	msg.show_inbox_response.num_of_mails = u->messages.size();
+
 	message_pool::iterator listiterator;
 	for(listiterator = u->messages.begin();
 			listiterator != u->messages.end();
 			listiterator++)
 	{
-		string summary = MessageSummary(listiterator->second);
-		send(fd, summary.c_str(), summary.size(), 0);
-	}
-	return;
-}
+		summary += MessageSummary(listiterator->second);
+		continue;
+/*
+		msg_data_show_inbox_response_record record;
+		record.mail_id = listiterator->second->id;
+		record.sender_len = listiterator->second->from.size();
+		record.subject_len = listiterator->second->subject.size();
+		record.num_of_attachments = listiterator->second->attachments.size();
 
-char GetNextMessage(string command)
-{
-	if (command == "SHOW_INBOX")
-		return SHOW_INBOX_C;
-	if (command == "GET_MAIL")
-		return GET_MAIL_C;
-	if (command == "GET_ATTACHMENT")
-		return GET_ATTACHMENT_C;
-	if (command == "QUIT")
-		return QUIT_C;
+		// Send record
+		if (-1 == SendDataToSocket(server_s.client_fd, (char*)&record, sizeof(msg_data_show_inbox_response_record)))
+		{
+			return -1;
+		}
+
+		// Send sender name
+		if (-1 == SendDataToSocket(server_s.client_fd, listiterator->second->from.c_str(), listiterator->second->from.size()))
+		{
+			return -1;
+		}
+
+		// Send subject
+		if (-1 == SendDataToSocket(server_s.client_fd, listiterator->second->subject.c_str(), listiterator->second->subject.size()))
+		{
+			return -1;
+		}
+		*/
+	}
+
+	msg.show_inbox_response.inbox_len = summary.size();
+	if (-1 == SendNextMessage(server_s.client_fd, &msg))
+	{
+		return -1;
+	}
+	// Send subject
+	if (-1 == SendDataToSocket(server_s.client_fd, summary.c_str(), msg.show_inbox_response.inbox_len))
+	{
+		return -1;
+	}
+
 	return 0;
 }
 
 int Login()
 {
-	string greeting = "‫.‪Welcome! I am simple-mail-server‬‬";
+	raw_msg msg;
+	char temp_buffer[MAX_LINE+1];
+	unsigned int username_len = 0, password_len = 0;
 	string username = "";
 	string password = "";
 
-	if (-1 == SendLineToSocket(server_s.client_fd, greeting))
-		return 1;
+	if (-1 == GetNextMessage(server_s.client_fd, &msg))
+	{
+		return -1;
+	}
 
-	// parse next request
-	string line;
-	if (0 != RecvLineFromSocket(server_s.client_fd, &line))
-		return 1;
+	if (msg.code != LOGIN)
+	{
+		return -1;
+	}
 
-    std::stringstream   linestream(line);
-    std::getline(linestream, username, ' ');  // read up-to the first space
-    std::getline(linestream, password, ' ');  // read up-to the second space
+	username_len = (msg.login_request.username_len > MAX_LINE ? MAX_LINE : msg.login_request.username_len);
+	password_len = (msg.login_request.password_len > MAX_LINE ? MAX_LINE : msg.login_request.password_len);
+
+	memset(temp_buffer, 0, MAX_LINE+1);
+	if (-1 == ReceiveDataFromSocket(server_s.client_fd, temp_buffer, username_len, 1))
+	{
+		return -1;
+	}
+
+	cout << temp_buffer << endl;
+	username = temp_buffer;
+
+	memset(temp_buffer, 0, MAX_LINE+1);
+	if (-1 == ReceiveDataFromSocket(server_s.client_fd, temp_buffer, password_len, 1))
+	{
+		return -1;
+	}
+
+	password = temp_buffer;
+
+	msg.code = LOGIN_RESPONSE;
+	msg.magic = MSG_MAGIC;
+	msg.login_response.result = 0;
 
 	users_db::iterator listiterator;
+
+	cout << "Client username is " << username << " and password " << password << endl;
+
 	for(listiterator = users_map.begin();
 			listiterator != users_map.end();
 			listiterator++)
 	{
-		if ((listiterator->first == username) && (listiterator->second->password == password))
+		if ((listiterator->first.compare(username) == 0) && (listiterator->second->password.compare(password) == 0))
 		{
 			// found a match
-			if (-1 == SendLineToSocket(server_s.client_fd, "Connected to server"))
-				return 1;
 			server_s.current_user = listiterator->second;
-			return 0;
+			msg.login_response.result = 1;
+			cout << "Authenticated username is " << listiterator->first << endl;
+			break;
 		}
 	}
+
+	// Send login result
+	if (-1 == SendNextMessage(server_s.client_fd, &msg))
+	{
+		return -1;
+	}
+
 	return 0;
 }
 
 void HandleClient()
 {
 	char quit = 0;
-	char code;
-	string command, arguments;
+	raw_msg msg;
 
 	if (-1 == Login())
 		return;
@@ -191,40 +304,34 @@ void HandleClient()
 	while (!quit)
 	{
 		// parse next request
-		string line;
-		if (0 != RecvLineFromSocket(server_s.client_fd, &line))
-			break;
-
-	    std::stringstream   linestream(line);
-	    std::getline(linestream, command, ' ');  // read up-to the first space
-	    std::getline(linestream, arguments, '\n');  // read up-to the newline
-	    cout << "cmd " << command << endl;
-	    cout << "args " << arguments << endl;
-		code = GetNextMessage(command);
-		if (0 == code)
+		if(-1 == GetNextMessage(server_s.client_fd, &msg))
 		{
-			cout << "Malformed message. Aborting" << endl;
+			quit = 1;
 			continue;
 		}
 
-		switch (code)
+		switch (msg.code)
 		{
 			case SHOW_INBOX_C:
-				ShowInbox(server_s.client_fd, server_s.current_user, arguments);
+				quit = ShowInbox(server_s.client_fd, server_s.current_user, &msg);
 				break;
 			case GET_MAIL_C:
-				GetMail(server_s.client_fd, server_s.current_user, arguments);
+				quit = GetMail(server_s.client_fd, server_s.current_user, &msg);
 				break;
 			case GET_ATTACHMENT_C:
-				GetAttachment(server_s.client_fd, server_s.current_user, arguments);
+				quit = GetAttachment(server_s.client_fd, server_s.current_user, &msg);
 				break;
 			case DELETE_MAIL_C:
+				quit = DeleteMail(server_s.client_fd, server_s.current_user, &msg);
+				break;
 			case COMPOSE_C:
+				quit = Compose(server_s.client_fd, server_s.current_user, &msg);
+				break;
 			case QUIT_C:
-				quit = 1;
+				quit = quit = 1;
 				break;
 			default:
-				cout << "Undefined msg code " << code << endl;
+				cout << "Undefined msg code " << msg.code << endl;
 				continue;
 		}
 	}
@@ -261,6 +368,7 @@ void ReadUsersFile(string path)
 	attachment* a1 = new attachment;
 	a1->filename = "funny1.jpg";
 	a1->data = malloc(50000);
+	memset(a1->data, 'A', 50000);
 	a1->size = 50000;
 	attachment* a2 = new attachment;
 	a2->filename = "funny2.jpg";
@@ -315,19 +423,25 @@ void StartListeningServer(unsigned short port)
 	    return;
 	}
 
-    // Server blocks on this call until a client tries to establish connection.
-    // When a connection is established, it returns a 'connected socket descriptor' different
-    // from the one created earlier.
-	socklen_t size = sizeof(server_s.client_addr);
-    server_s.client_fd = accept(server_s.server_fd, (struct sockaddr *)&server_s.client_addr, &size);
-    if (server_s.client_fd == -1)
-    	cout << "Failed accepting connection" << ". Aborting. (" << strerror(errno) << ")" << endl;
-    else
-    	cout << "Client Connected" << endl;
 
-	HandleClient();
+	while (1)
+	{
+		socklen_t size = sizeof(server_s.client_addr);
+		server_s.client_fd = accept(server_s.server_fd, (struct sockaddr *)&server_s.client_addr, &size);
+		if (server_s.client_fd == -1)
+		{
+			cout << "Failed accepting connection" << ". Aborting. (" << strerror(errno) << ")" << endl;
+			break;
+		}
+		else
+		{
+			cout << "Client Connected" << endl;
+		}
 
-	close(server_s.client_fd);
+		HandleClient();
+
+		close(server_s.client_fd);
+	}
 	close(server_s.server_fd);
 	return;
 }
