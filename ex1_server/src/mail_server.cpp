@@ -17,10 +17,13 @@
 
 using namespace std;
 
+char loop_forever = 1;
+
 int Compose(int fd, user* u, raw_msg* arguments)
 {
 	char temp_buffer[MAX_BUFFER]; // temp buffer for reading/storing operations
 	raw_msg msg;
+	memset(&msg, 0, sizeof(msg));
 	field f;
 
 	msg.code = COMPOSE_RESPONSE;
@@ -194,6 +197,7 @@ int DeleteMail(int fd, user* u, raw_msg* arguments)
 int GetAttachment(int fd, user* u, raw_msg* arguments)
 {
 	raw_msg msg;
+	memset(&msg, 0, sizeof(msg));
 
     if (u->messages.count(arguments->get_attachment.mail_id) == 0)
     {
@@ -271,7 +275,7 @@ int GetMail(int fd, user* u, raw_msg* arguments)
 {
 	unsigned int id = 1;
 	string formatted_message = "";
-	raw_msg msg;
+	raw_msg msg = {0};
 
 	id =  arguments->get_mail.mail_id;
     cout << "Getting mail number " << id << endl;
@@ -285,8 +289,6 @@ int GetMail(int fd, user* u, raw_msg* arguments)
 	formatted_message = FullMessage(u->messages[id]);
 	msg.code = GET_MAIL_RESPONSE;
 	msg.get_mail_response.mail_len = formatted_message.size();
-
-	cout << "Sending " << msg.get_mail_response.mail_len << " chars:" << endl;
 
 	if (-1 == SendNextMessage(server_s.client_fd, &msg))
 	{
@@ -315,6 +317,8 @@ int ShowInbox(int fd, user* u, raw_msg* arguments)
 {
 	string summary = "";
 	raw_msg msg;
+	memset(&msg, 0, sizeof(msg));
+
 	msg.code = SHOW_INBOX_RESPONSE;
 	msg.show_inbox_response.num_of_mails = u->messages.size();
 
@@ -368,7 +372,6 @@ int Login()
 		return -1;
 	}
 
-	cout << temp_buffer << endl;
 	username = temp_buffer;
 
 	memset(temp_buffer, 0, MAX_LINE+1);
@@ -543,7 +546,7 @@ void StartListeningServer(unsigned short port)
 	}
 
 
-	while (1)
+	while (loop_forever)
 	{
 		socklen_t size = sizeof(server_s.client_addr);
 		server_s.client_fd = accept(server_s.server_fd, (struct sockaddr *)&server_s.client_addr, &size);
@@ -565,6 +568,35 @@ void StartListeningServer(unsigned short port)
 	return;
 }
 
+void ReleaseUsers()
+{
+
+	users_db::iterator listiterator;
+
+	for(listiterator = users_map.begin();
+			listiterator != users_map.end();
+			listiterator++)
+	{
+		message_pool::iterator miterator;
+		for(miterator = listiterator->second->messages.begin();
+				miterator != listiterator->second->messages.end();
+				miterator++)
+		{
+			raw_msg arguments = {0};
+			arguments.delete_mail.mail_id = miterator->second->id;
+			DeleteMail(0, listiterator->second, &arguments);
+		}
+		delete listiterator->second;
+	}
+
+	return;
+}
+
+void sighandler(int sig)
+{
+	loop_forever = false;
+}
+
 
 int main(int argc, char** argv) {
 	string users_file_path = "";
@@ -575,7 +607,11 @@ int main(int argc, char** argv) {
 		cout << "Usage: " << argv[0] << " users_file [port]" << endl;
 		return 2;
 	}
-
+/*
+    signal(SIGABRT, &sighandler);
+	signal(SIGTERM, &sighandler);
+	signal(SIGINT, &sighandler);
+*/
 	// Get users file path
 	users_file_path = argv[1];
 
@@ -589,6 +625,9 @@ int main(int argc, char** argv) {
 	ReadUsersFile(users_file_path);
 
 	StartListeningServer(port);
+
+	// release all db
+	ReleaseUsers();
 
 	// We should never get here.
 	return 0;
