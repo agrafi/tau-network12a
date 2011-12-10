@@ -58,7 +58,6 @@ int Compose(int fd, user* u, raw_msg* arguments)
 			return -1;
 		}
 
-		cout << "Got message to " << recipient << endl;
 		m->to.push_front(users_map[recipient]);
 	}
 
@@ -70,7 +69,6 @@ int Compose(int fd, user* u, raw_msg* arguments)
 	}
 
 	m->subject = temp_buffer;
-	cout << "Got subject " << m->subject << endl;
 
 	// Read text
 	memset(temp_buffer, 0, sizeof(temp_buffer));
@@ -80,7 +78,6 @@ int Compose(int fd, user* u, raw_msg* arguments)
 	}
 
 	m->body = temp_buffer;
-	cout << "Got text " << m->body << endl;
 
 	// Receive attachment list
 	for (unsigned int i=0; i<arguments->compose.attachments_num; i++)
@@ -107,7 +104,7 @@ int Compose(int fd, user* u, raw_msg* arguments)
 			{
 
 				if ((*attachmentsiterator).second->data != NULL)
-					delete (*attachmentsiterator).second->data;
+					free( (*attachmentsiterator).second->data);
 			}
 			delete m;
 			return -1;
@@ -129,7 +126,7 @@ int Compose(int fd, user* u, raw_msg* arguments)
 			{
 
 				if ((*attachmentsiterator).second->data != NULL)
-					delete (*attachmentsiterator).second->data;
+					free ((*attachmentsiterator).second->data);
 			}
 			delete m;
 			return -1;
@@ -182,7 +179,7 @@ int DeleteMail(int fd, user* u, raw_msg* arguments)
 
 		if ((*attachmentsiterator).second->data != NULL)
 			if (--(*attachmentsiterator).second->refcount == 0) // if ref count reached zero, delete
-				delete (*attachmentsiterator).second->data;
+				free((*attachmentsiterator).second->data);
 	}
 	// delete message from memory
 	delete(u->messages[id]);
@@ -328,31 +325,6 @@ int ShowInbox(int fd, user* u, raw_msg* arguments)
 	{
 		summary += MessageSummary(listiterator->second);
 		continue;
-/*
-		msg_data_show_inbox_response_record record;
-		record.mail_id = listiterator->second->id;
-		record.sender_len = listiterator->second->from.size();
-		record.subject_len = listiterator->second->subject.size();
-		record.num_of_attachments = listiterator->second->attachments.size();
-
-		// Send record
-		if (-1 == SendDataToSocket(server_s.client_fd, (char*)&record, sizeof(msg_data_show_inbox_response_record)))
-		{
-			return -1;
-		}
-
-		// Send sender name
-		if (-1 == SendDataToSocket(server_s.client_fd, listiterator->second->from.c_str(), listiterator->second->from.size()))
-		{
-			return -1;
-		}
-
-		// Send subject
-		if (-1 == SendDataToSocket(server_s.client_fd, listiterator->second->subject.c_str(), listiterator->second->subject.size()))
-		{
-			return -1;
-		}
-		*/
 	}
 
 	msg.show_inbox_response.inbox_len = summary.size();
@@ -473,10 +445,10 @@ void HandleClient()
 				quit = Compose(server_s.client_fd, server_s.current_user, &msg);
 				break;
 			case QUIT_C:
-				quit = quit = 1;
+				quit = 1;
 				break;
 			default:
-				cout << "Undefined msg code " << msg.code << endl;
+				// cout << "Undefined msg code " << msg.code << endl;
 				continue;
 		}
 	}
@@ -549,7 +521,7 @@ void StartListeningServer(unsigned short port)
 		return;
 	}
 
-	// For debuggind only
+	// For debugging only
 	int opt = 1;
 	setsockopt(server_s.server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
