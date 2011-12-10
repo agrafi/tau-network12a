@@ -21,103 +21,6 @@
 
 using namespace std;
 
-int Login()
-{
-	string line;
-	string username, password;
-	getline (cin,line);
-	vector<string> x = split(line, ' ');
-	if (x.size() < 2)
-		return -1;
-	username = x[1];
-
-	getline (cin,line);
-	x = split(line, ' ');
-	if (x.size() < 2)
-		return -1;
-	password = x[1];
-
-	raw_msg msg;
-	msg.code = LOGIN;
-	msg.magic = MSG_MAGIC;
-	msg.login_request.username_len = username.size();
-	msg.login_request.password_len = password.size();
-
-	// Send header
-	if (-1 == SendNextMessage(client_s.client_fd, &msg))
-	{
-		return -1;
-	}
-
-	// Send username
-	if (-1 == SendDataToSocket(client_s.client_fd, username.c_str(), username.size()))
-	{
-		return -1;
-	}
-
-	// Send password
-	if (-1 == SendDataToSocket(client_s.client_fd, password.c_str(), password.size()))
-	{
-		return -1;
-	}
-
-	// Get result header
-	if (-1 == GetNextMessage(client_s.client_fd, &msg))
-	{
-		return -1;
-	}
-
-	// Verify message
-	if (msg.code != LOGIN_RESPONSE)
-	{
-		return -1;
-	}
-
-	// Check login result
-	if (msg.login_response.result != 1)
-	{
-		return -1;
-	}
-
-	cout << "Connected to server" << endl;
-	return 0;
-}
-
-int ConnectToServer(char* hostname, unsigned short port)
-{
-      struct in_addr h_addr;    /* internet address */
-      struct sockaddr_in echoServAddr; /* Echo server address */
-
-      struct hostent *host;     /* host information */
-        if ((host = gethostbyname(hostname)) == NULL)
-        {
-  		  cout << "Could not resolve server name: " << strerror(errno) << endl;
-  		  return -1;
-        }
-
-      /* Create a reliable, stream socket using TCP */
-      if ((client_s.client_fd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0)
-      {
-		  cout << "Could not connect to server: " << strerror(errno) << endl;
-		  return -1;
-      }
-
-      /* Construct the server address structure */
-      memset(&echoServAddr, 0, sizeof(echoServAddr));     /* Zero out structure */
-      echoServAddr.sin_family      = AF_INET;             /* Internet address family */
-      echoServAddr.sin_addr.s_addr = *((unsigned long *) host->h_addr_list[0]);   /* Server IP address */
-      echoServAddr.sin_port        = htons(port); /* Server port */
-
-      /* Establish the connection to the echo server */
-      if (connect(client_s.client_fd, (struct sockaddr *) &echoServAddr, sizeof(echoServAddr)) < 0)
-      {
-		  cout << "Could not connect to server: " << strerror(errno) << endl;
-		  return -1;
-      }
-
-	return 0;
-}
-
 int ShowInbox(string arguments)
 {
 	raw_msg msg;
@@ -471,12 +374,109 @@ int HandleCommands()
 				continue;
 		}
 	}
+	return 0;
+}
 
+
+int Login()
+{
+	string line;
+	string username, password;
+	getline (cin,line);
+	vector<string> x = split(line, ' ');
+	if (x.size() < 2)
+		return -1;
+	username = x[1];
+
+	getline (cin,line);
+	x = split(line, ' ');
+	if (x.size() < 2)
+		return -1;
+	password = x[1];
+
+	raw_msg msg;
+	msg.code = LOGIN;
+	msg.magic = MSG_MAGIC;
+	msg.login_request.username_len = username.size();
+	msg.login_request.password_len = password.size();
+
+	// Send header
+	if (-1 == SendNextMessage(client_s.client_fd, &msg))
+	{
+		return -1;
+	}
+
+	// Send username
+	if (-1 == SendDataToSocket(client_s.client_fd, username.c_str(), username.size()))
+	{
+		return -1;
+	}
+
+	// Send password
+	if (-1 == SendDataToSocket(client_s.client_fd, password.c_str(), password.size()))
+	{
+		return -1;
+	}
+
+	// Get result header
+	if (-1 == GetNextMessage(client_s.client_fd, &msg))
+	{
+		return -1;
+	}
+
+	// Verify message
+	if (msg.code != LOGIN_RESPONSE)
+	{
+		return -1;
+	}
+
+	// Check login result
+	if (msg.login_response.result != 1)
+	{
+		return -1;
+	}
+
+	cout << "Connected to server" << endl;
+	return 0;
+}
+
+int ConnectToServer(const char* hostname, unsigned short port)
+{
+      struct sockaddr_in echoServAddr; /* Echo server address */
+
+      struct hostent *host;     /* host information */
+        if ((host = gethostbyname(hostname)) == NULL)
+        {
+  		  cout << "Could not resolve server name: " << strerror(errno) << endl;
+  		  return -1;
+        }
+
+      /* Create a reliable, stream socket using TCP */
+      if ((client_s.client_fd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0)
+      {
+		  cout << "Could not connect to server: " << strerror(errno) << endl;
+		  return -1;
+      }
+
+      /* Construct the server address structure */
+      memset(&echoServAddr, 0, sizeof(echoServAddr));     /* Zero out structure */
+      echoServAddr.sin_family      = AF_INET;             /* Internet address family */
+      echoServAddr.sin_addr.s_addr = *((unsigned long *) host->h_addr_list[0]);   /* Server IP address */
+      echoServAddr.sin_port        = htons(port); /* Server port */
+
+      /* Establish the connection to the echo server */
+      if (connect(client_s.client_fd, (struct sockaddr *) &echoServAddr, sizeof(echoServAddr)) < 0)
+      {
+		  cout << "Could not connect to server: " << strerror(errno) << endl;
+		  return -1;
+      }
+
+	return 0;
 }
 
 int main(int argc, char** argv) {
 	unsigned short port = 6423;
-	char* host = "localhost";
+	const char* host = "localhost";
 
 
 	if (argc > 3)
