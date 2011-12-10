@@ -130,18 +130,56 @@ int RecvLineFromSocket(int fd, string* ret)
 	return 0;
 }
 
-int WriteFileFromSocket(int fd, char *path, unsigned long long size)
+unsigned long long GetFileSize(char *pre_expanded_path)
 {
+	wordexp_t exp_result;
+	struct stat filestatus;
+	string path = "";
+
+	// expand and open filename by full path
+	wordexp(pre_expanded_path, &exp_result, 0);
+
+	for (unsigned int i=0; i<exp_result.we_wordc ; i++)
+	{
+		path += exp_result.we_wordv[i];
+		if (i<exp_result.we_wordc-1)
+			path += " ";
+	}
+
+	if (-1 == stat( path.c_str(), &filestatus ))
+	{
+		wordfree(&exp_result);
+		return 0;
+	}
+
+	wordfree(&exp_result);
+	return filestatus.st_size;
+}
+
+int WriteFileFromSocket(int fd, char *pre_expanded_path, unsigned long long size)
+{
+	wordexp_t exp_result;
+	string path = "";
 	fstream myfile;
 	char buffer[MAX_BUFFER] = {0};
 	unsigned long long nleft = size;
 
-	myfile.open(path,ios::out | ios::binary);
+	// expand and open filename by full path
+	wordexp(pre_expanded_path, &exp_result, 0);
+
+	for (unsigned int i=0; i<exp_result.we_wordc ; i++)
+	{
+		path += exp_result.we_wordv[i];
+		if (i<exp_result.we_wordc-1)
+			path += " ";
+	}
+	myfile.open(path.c_str(),ios::out | ios::binary);
+	wordfree(&exp_result);
 
 	//verify that file opened correctly
 	if (!myfile.is_open())
 	{
-		cout << "Could not open file " << path << endl;
+		cout << "Could not open file " << path << " " << strerror(errno) << endl;
 		return -1;
 	}
 
@@ -159,6 +197,61 @@ int WriteFileFromSocket(int fd, char *path, unsigned long long size)
 	return 0;
 }
 
+int WriteFileToSocket(int fd, char *pre_expanded_path, unsigned long long size)
+{
+	wordexp_t exp_result;
+	string path;
+	fstream myfile;
+	char buffer[MAX_BUFFER] = {0};
+	unsigned long long nleft = size;
+	streamsize nread = 0;
+
+	// Trim \" from both sides
+	if(pre_expanded_path[strlen(pre_expanded_path) - 1] == '\"')
+	{
+		pre_expanded_path[strlen(pre_expanded_path) - 1] = '\0';
+	}
+	if(pre_expanded_path[0] == '\"')
+	{
+		pre_expanded_path++;
+	}
+
+	// expand and open filename by full path
+	wordexp(pre_expanded_path, &exp_result, 0);
+
+	for (unsigned int i=0; i<exp_result.we_wordc ; i++)
+	{
+		path += exp_result.we_wordv[i];
+		if (i<exp_result.we_wordc-1)
+			path += " ";
+	}
+
+	myfile.open(path.c_str(), ios::in | ios::binary);
+	wordfree(&exp_result);
+
+	//verify that file opened correctly
+	if (!myfile.is_open())
+	{
+		cout << "Could not open file " << path << " " << strerror(errno) << endl;
+		return -1;
+	}
+
+	while(myfile.good())
+	{
+		myfile.read(buffer, MAX_BUFFER);
+		nread = myfile.gcount();
+
+		if (-1 == SendDataToSocket(fd, buffer, nread))
+			return -1;
+
+		nleft -= nread;
+	}
+
+	myfile.close();
+
+	return 0;
+}
+
 // Using the STL
 int strtoint(string s)
 {
@@ -167,6 +260,22 @@ int strtoint(string s)
   strStream >> ret;
   return ret;
 }
+
+string ExtractFilename( const string& path )
+{
+	string ret = path;
+	if(ret[ret.length() - 1] == '\"')
+	{
+		ret.erase(ret.length()-1);
+	}
+	if(path[0] == '\"')
+	{
+		ret = ret.substr(1);
+	}
+
+	return ret.substr( ret.find_last_of( '/' ) +1 );
+}
+
 
 int GetNextMessage(int fd, raw_msg* msg)
 {

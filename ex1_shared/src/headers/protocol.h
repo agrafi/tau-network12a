@@ -18,6 +18,8 @@
 #include <string.h>
 #include <errno.h>
 #include <stdio.h>
+#include <wordexp.h>
+#include <sys/stat.h>
 
 using namespace std;
 
@@ -50,7 +52,7 @@ typedef enum {
 } msg_code;
 
 typedef enum field_code {
-	SENDER,
+	RECIPIENT,
 	SUBJECT,
 	USERNAME,
 	PASSWORD
@@ -73,6 +75,12 @@ typedef struct {
 typedef struct {
 	unsigned int result;
 } msg_data_login_response;
+
+// compose result structure
+typedef struct {
+	unsigned int result;
+} msg_data_compose_response;
+
 
 // Show Inbox Message structure
 typedef struct {
@@ -97,7 +105,10 @@ typedef struct {
 
 // Compose Message structure
 typedef struct {
-// TODO: fill me
+	unsigned int recipients_num;
+	unsigned int subject_len;
+	unsigned int text_len;
+	unsigned int attachments_num;
 } msg_data_compose;
 
 typedef struct {
@@ -110,6 +121,8 @@ typedef struct {
 	unsigned long long attachment_size;
 	unsigned int filename_len;
 } msg_data_get_attachment_respose;
+
+typedef msg_data_get_attachment_respose msg_data_attachment_field;
 
 typedef struct {
 	unsigned int mail_id;
@@ -138,6 +151,8 @@ typedef struct {
 		msg_data_get_mail get_mail;
 		msg_data_delete_mail delete_mail;
 		msg_data_get_attachment get_attachment;
+		msg_data_compose compose;
+		msg_data_compose_response compose_response;
 		msg_data_get_attachment_respose get_attachment_response;
 		msg_data_show_inbox_response show_inbox_response;
 		msg_data_get_mail_response get_mail_response;
@@ -151,16 +166,23 @@ typedef struct {
 
 #define MSG_MAGIC 0xCAFEBABE
 
-// helper functions
+// helper functions - obsolete
 int SendLineToSocket(int fd, string str);
 int RecvLineFromSocket(int fd, string* ret);
 int SendPacketToSocket(int fd, raw_msg* msg);
 
+// Message/Socket operations
 int GetNextMessage(int fd, raw_msg* msg);
 int SendNextMessage(int fd, raw_msg* msg);
 int SendDataToSocket(int fd, const char* data, int size);
 int ReceiveDataFromSocket(int fd, char *data, int size, int receiveall);
-int WriteFileFromSocket(int fd, char *path, unsigned long long size);
+
+
+// File operations
+unsigned long long GetFileSize(char *pre_expanded_path);
+string ExtractFilename( const string& path );
+int WriteFileFromSocket(int fd, char *pre_expanded_path, unsigned long long size);
+int WriteFileToSocket(int fd, char *pre_expanded_path, unsigned long long size);
 
 char GetNextCommand(string command);
 
