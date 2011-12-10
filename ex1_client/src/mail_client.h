@@ -20,6 +20,7 @@
 #include <signal.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <vector>
 
 using namespace std;
 
@@ -53,17 +54,13 @@ struct message_t
 } message;
 
 
-// Server structure
-struct server_t
+// Client structure
+struct client_t
 {
-	int fd;
-	struct sockaddr_in sin;
-
-} server;
-
+	int client_fd;
+} client;
 
 // Globals
-list <user_t> users_list;
-server_t server_s;
+client_t client_s;
 
 #endif /* MAIL_SERVER_H_ */

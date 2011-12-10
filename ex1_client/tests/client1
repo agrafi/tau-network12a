@@ -1,0 +1,33 @@
+User: aba
+Password: baba
+SHOW_INBOX
+COMPOSE
+To: eran,yael,foo,aba,yabadaba,bye,grag
+Subject: to everyone
+Attachments: "~/mail_server/bigfile"
+Text: asghdfksfgjhdlsjkghsdfbnmxbvnmxbcasdjhdjflka asgjhdkfjghdsbvmxc, xvcbhkghkdf dfkjghlksdj fgcvbmxcnb ldasgus lrgh,vmcbxbvlaksgdf sd;fga;sr gflksdjfghdflkjsdgh kjh	 ksjhgsfkjh kh	 kjh kjhgsdfkjhdf kj	 kjhsghdfdsbnvmxnbcvmnbvsidjrghlhjrdf bv b,mbdfgjsderhgt eirughdkjfhgbhvmxnbvm,nxzdfhgakjsrhfgiuhdfkjxchvbmcxnb jhkj	gjh hg dgk
+SHOW_INBOX
+GET_MAIL 1
+GET_ATTACHMENT 1 1 "~/mail_server/inbox/"
+
+COMPOSE
+To: bye,grag,eran
+Subject: to 3
+Attachments: "~/mail_server/a1","~/mail_server/a2","~/mail_server/empty_file.txt"
+Text: gjhdkfjhgdbfv
+COMPOSE
+To: aba
+Subject: just to me
+Attachments:
+Text: djfkgh
+COMPOSE
+To: aba
+Subject: just to me2
+Attachments:
+Text: djfkgh
+SHOW_INBOX
+DELETE_MAIL 2
+GET_MAIL 3
+SHOW_INBOX
+GET_ATTACHMENT 3 1 "~/mail_server/inbox/"
+QUIT

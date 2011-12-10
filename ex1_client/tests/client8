@@ -1,0 +1,7 @@
+User: yabadaba
+Password: du
+SHOW_INBOX
+GET_MAIL 1
+DELETE_MAIL 1
+DELETE_MAIL 2
+DELETE_MAIL 3

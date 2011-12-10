@@ -1,0 +1,14 @@
+User: grag
+Password: house
+SHOW_INBOX
+GET_MAIL 2
+DELETE_MAIL 2
+SHOW_INBOX
+COMPOSE
+To: eran,grag
+Subject: tototo
+Attachments: "~/mail_server/bigfile","~/mail_server/a1","~/mail_server/a2","~/mail_server/empty_file.txt"
+Text: bli bla blu	bli bla		
+SHOW_INBOX
+DELETE_MAIL 2
+QUIT

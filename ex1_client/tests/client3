@@ -1,0 +1,6 @@
+User: foo
+Password: bar
+SHOW_INBOX
+GET_MAIL 1
+DELET_MAIL 1
+QUIT

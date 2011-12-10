@@ -1,0 +1,14 @@
+User: moshe
+Password: rabenu
+User: yabadaba
+Password: du
+SHOW_INBOX
+COMPOSE
+To: eran,yael,foo,aba,yabadaba,bye,grag
+Subject: to everyone2
+Attachments: "~/mail_server/bigfile","~/mail_server/a1","~/mail_server/a2","~/mail_server/empty_file.txt"
+Text: dfgkjh s;dflgj
+SHOW_INBOX
+GET_ATTACHMENT 2 3 "~/mail_server/inbox2/"
+DELETE_MAIL 1
+QUIT

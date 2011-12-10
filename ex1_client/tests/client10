@@ -1,0 +1,11 @@
+User: foo
+Password: bar
+COMPOSE
+To: eran,yael,foo
+Subject: to3
+Attachments: "~/mail_server/bigfile","~/mail_server/a2","~/mail_server/empty_file.txt"
+Text: hhhhhhhhhhhhhhhhhhhh
+GET_ATTACHMENT 2 3 "~/mail_server/inbox2/"
+GET_MAIL 3
+GET_MAIL 2
+QUIT
