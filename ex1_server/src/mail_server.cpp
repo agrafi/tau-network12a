@@ -19,6 +19,146 @@ using namespace std;
 
 int Compose(int fd, user* u, raw_msg* arguments)
 {
+	char temp_buffer[MAX_BUFFER]; // temp buffer for reading/storing operations
+	raw_msg msg;
+	field f;
+
+	msg.code = COMPOSE_RESPONSE;
+	msg.magic = MSG_MAGIC;
+
+	message_t *m = new message_t;
+	m->from = u->username;
+
+	// Receive recipients list
+	for (unsigned int i=0; i<arguments->compose.recipients_num; i++)
+	{
+
+		if (-1 == ReceiveDataFromSocket(server_s.client_fd, (char*)&f, sizeof(f), 1))
+		{
+			delete m;
+			return -1;
+		}
+
+		if (f.code != RECIPIENT)
+		{
+			cout << "Error. Expecting RECIPIENT field but I got " << f.code << endl;
+			delete m;
+			return -1;
+		}
+
+		memset(temp_buffer, 0, sizeof(temp_buffer));
+		if (-1 == ReceiveDataFromSocket(server_s.client_fd, temp_buffer, f.len, 1))
+		{
+			return -1;
+		}
+		string recipient = temp_buffer;
+		if (users_map.count(recipient) == 0)
+		{
+			cout << "Unknown recipient " << recipient << endl;
+			return -1;
+		}
+
+		cout << "Got message to " << recipient << endl;
+		m->to.push_front(users_map[recipient]);
+	}
+
+	// Read subject
+	memset(temp_buffer, 0, sizeof(temp_buffer));
+	if (-1 == ReceiveDataFromSocket(server_s.client_fd, temp_buffer, arguments->compose.subject_len, 1))
+	{
+		return -1;
+	}
+
+	m->subject = temp_buffer;
+	cout << "Got subject " << m->subject << endl;
+
+	// Read text
+	memset(temp_buffer, 0, sizeof(temp_buffer));
+	if (-1 == ReceiveDataFromSocket(server_s.client_fd, temp_buffer, arguments->compose.text_len, 1))
+	{
+		return -1;
+	}
+
+	m->body = temp_buffer;
+	cout << "Got text " << m->body << endl;
+
+	// Receive attachment list
+	for (unsigned int i=0; i<arguments->compose.attachments_num; i++)
+	{
+		msg_data_attachment_field f;
+		if (-1 == ReceiveDataFromSocket(server_s.client_fd, (char*)&f, sizeof(f), 1))
+		{
+			delete m;
+			return -1;
+		}
+		// f.filename_len = attachment_list[i].size();
+		// f.attachment_size = GetFileSize((char*)attachment_list[i].c_str());
+
+
+		// Receive Filename
+		memset(temp_buffer, 0, sizeof(temp_buffer));
+		if (-1 == ReceiveDataFromSocket(server_s.client_fd, temp_buffer, f.filename_len, 1))
+		{
+			// Loop over attachments and free them all
+			attachment_pool::iterator attachmentsiterator;
+			for(attachmentsiterator = m->attachments.begin();
+					attachmentsiterator != m->attachments.end();
+					attachmentsiterator++)
+			{
+
+				if ((*attachmentsiterator).second->data != NULL)
+					delete (*attachmentsiterator).second->data;
+			}
+			delete m;
+			return -1;
+		}
+
+		attachment* at = new attachment;
+		at->filename = ExtractFilename(temp_buffer);
+		at->data = calloc(1, f.attachment_size);
+		at->size = f.attachment_size;
+		at->refcount = m->to.size(); // Set ref count to number of recipients
+
+		if (-1 == ReceiveDataFromSocket(server_s.client_fd, (char*)at->data, at->size, 1))
+		{
+			// Loop over attachments and free them all
+			attachment_pool::iterator attachmentsiterator;
+			for(attachmentsiterator = m->attachments.begin();
+					attachmentsiterator != m->attachments.end();
+					attachmentsiterator++)
+			{
+
+				if ((*attachmentsiterator).second->data != NULL)
+					delete (*attachmentsiterator).second->data;
+			}
+			delete m;
+			return -1;
+		}
+
+		m->attachments[i+1] = at; // list is one based
+	}
+
+	// Store mail in db for each recipient
+	list <user*>::iterator listiterator;
+	for(listiterator = m->to.begin();
+			listiterator != m->to.end();
+			listiterator++)
+	{
+		message_t *queued_msg = new message_t;
+		*queued_msg = *m; // Clone message
+		queued_msg->id = (*listiterator)->next_msg_id++;
+		(*listiterator)->messages[queued_msg->id] = queued_msg;
+	}
+	msg.code = COMPOSE_RESPONSE;
+	msg.compose_response.result = 1;
+
+	if (-1 == SendNextMessage(server_s.client_fd, &msg))
+	{
+		// We keeps the mail in db event the reponse could not be sent.
+		return -1;
+	}
+
+	cout << "Mail received" << endl;
 	return 0;
 }
 
@@ -41,7 +181,8 @@ int DeleteMail(int fd, user* u, raw_msg* arguments)
 	{
 
 		if ((*attachmentsiterator).second->data != NULL)
-			delete (*attachmentsiterator).second->data;
+			if (--(*attachmentsiterator).second->refcount == 0) // if ref count reached zero, delete
+				delete (*attachmentsiterator).second->data;
 	}
 	// delete message from memory
 	delete(u->messages[id]);
@@ -60,6 +201,7 @@ int GetAttachment(int fd, user* u, raw_msg* arguments)
     if (u->messages.count(arguments->get_attachment.mail_id) == 0)
     {
     	// message id does not exists, abort
+    	cout << "message id does not exists, abort" << endl;
     	return -1;
     }
 
@@ -68,6 +210,7 @@ int GetAttachment(int fd, user* u, raw_msg* arguments)
     if (m->attachments.count(arguments->get_attachment.attachment_id) == 0)
     {
     	// attachment id does not exists, abort
+    	cout << "attachment id " << arguments->get_attachment.attachment_id << " does not exists, abort" << endl;
     	return -1;
     }
 
@@ -119,7 +262,7 @@ string FullMessage(message* m)
 	{
 		if (attachmentsiterator != m->attachments.begin())
 			ret << ",";
-		ret << (*attachmentsiterator).second->filename;
+		ret << "\"" << (*attachmentsiterator).second->filename << "\"";
 	}
 	ret << endl;
 
@@ -145,6 +288,8 @@ int GetMail(int fd, user* u, raw_msg* arguments)
 	formatted_message = FullMessage(u->messages[id]);
 	msg.code = GET_MAIL_RESPONSE;
 	msg.get_mail_response.mail_len = formatted_message.size();
+
+	cout << "Sending " << msg.get_mail_response.mail_len << " chars:" << endl;
 
 	if (-1 == SendNextMessage(server_s.client_fd, &msg))
 	{
@@ -357,6 +502,8 @@ void ReadUsersFile(string path)
 	    u->next_msg_id = 1;
 	}
 
+	// FOR DEBUGGING
+	/*
 	user* u = users_map["Moshe"];
 	message_t *m = new message_t;
 	m->id = u->next_msg_id;
@@ -389,7 +536,7 @@ void ReadUsersFile(string path)
 
 	user* u2 = users_map["Moshe"];
 	u2->messages[u->next_msg_id++] = m2;
-
+	*/
 
 	return;
 }

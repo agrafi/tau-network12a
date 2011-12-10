@@ -33,6 +33,7 @@ typedef struct
 	string filename;
 	unsigned long size;
 	void* data;
+	unsigned short refcount;
 } attachment;
 
 // Forward declaration
