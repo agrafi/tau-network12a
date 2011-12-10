@@ -51,12 +51,12 @@ typedef enum {
 	COMPOSE_RESPONSE
 } msg_code;
 
-typedef enum field_code {
+typedef enum {
 	RECIPIENT,
 	SUBJECT,
 	USERNAME,
 	PASSWORD
-};
+} field_code;
 
 #pragma pack(push, 1)
 
@@ -141,7 +141,7 @@ typedef struct {
 // Raw message to be sent on socket
 typedef struct {
 	// message magic
-	int magic;
+	unsigned int magic;
 	// message code
 	msg_code code;
 	union {
