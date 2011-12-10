@@ -23,7 +23,7 @@ using namespace std;
 
 int ShowInbox(string arguments)
 {
-	raw_msg msg;
+	raw_msg msg = {0};
 	msg.magic = MSG_MAGIC;
 	msg.code = SHOW_INBOX;
 
@@ -45,7 +45,7 @@ int ShowInbox(string arguments)
 		return -1;
 	}
 
-	char* inbox_buffer = (char*) calloc(1, msg.show_inbox_response.inbox_len);
+	char* inbox_buffer = (char*) calloc(1, msg.show_inbox_response.inbox_len + 1);
 	if (-1 == ReceiveDataFromSocket(client_s.client_fd, inbox_buffer, msg.show_inbox_response.inbox_len, 1))
 	{
 		delete inbox_buffer;
@@ -61,7 +61,7 @@ int ShowInbox(string arguments)
 
 int GetMail(string arguments)
 {
-	raw_msg msg;
+	raw_msg msg = {0};
 	msg.magic = MSG_MAGIC;
 	msg.code = GET_MAIL;
 
@@ -106,7 +106,7 @@ int GetMail(string arguments)
 
 int GetAttachment(string arguments)
 {
-	raw_msg msg;
+	raw_msg msg = {0};
 	msg.magic = MSG_MAGIC;
 	msg.code = GET_ATTACHMENT;
 
@@ -154,7 +154,7 @@ int GetAttachment(string arguments)
 		return -1;
 	}
 
-	char* filename = (char*)calloc(1, msg.get_attachment_response.filename_len);
+	char* filename = (char*)calloc(1, msg.get_attachment_response.filename_len + 1);
 	if (-1 == ReceiveDataFromSocket(client_s.client_fd, filename, msg.get_attachment_response.filename_len, 1))
 	{
 		free(filename);
@@ -176,7 +176,7 @@ int GetAttachment(string arguments)
 
 int DeleteMail(string arguments)
 {
-	raw_msg msg;
+	raw_msg msg = {0};
 	msg.magic = MSG_MAGIC;
 	msg.code = DELETE_MAIL;
 
@@ -198,7 +198,7 @@ int DeleteMail(string arguments)
 
 int Compose(string arguments)
 {
-	raw_msg msg;
+	raw_msg msg = {0};
 	msg.code = COMPOSE;
 	msg.magic = MSG_MAGIC;
 
@@ -394,7 +394,7 @@ int Login()
 		return -1;
 	password = x[1];
 
-	raw_msg msg;
+	raw_msg msg = {0};
 	msg.code = LOGIN;
 	msg.magic = MSG_MAGIC;
 	msg.login_request.username_len = username.size();
