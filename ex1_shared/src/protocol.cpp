@@ -5,7 +5,7 @@
  *      Author: aviv
  */
 
-#include "headers/protocol.h"
+#include "protocol.h"
 
 std::vector<std::string> &split(const std::string &s, char delim, std::vector<std::string> &elems) {
     std::stringstream ss(s);
@@ -94,40 +94,6 @@ int ReceiveDataFromSocket(int fd, char *data, int size, int receiveall)
 	while (totread != size);
 
 	return totread;
-}
-
-// TODO: Replace with RecvDataFromSocket
-int RecvLineFromSocket(int fd, string* ret)
-{
-	char buffer[MAX_LINE];
-	int nRecv = 0, nTotal = 0;
-	// init buffer
-	memset(buffer, 0, MAX_LINE);
-
-	// Read MAX_LINE chars or until newline
-	while (nTotal < MAX_LINE)
-	{
-		nRecv = recv(fd, buffer + nTotal, 1, 0);
-		if (nRecv == -1)
-		{
-			// try again
-			if (errno == EAGAIN)
-				continue;
-			// error occurred
-			perror(strerror(errno));
-			return errno;
-		}
-		if ((buffer[nTotal] == '\r') || (buffer[nTotal] == '\n'))
-		{
-			// done.
-			buffer[nTotal] = '\0';
-			break;
-		}
-		nTotal += nRecv;
-	}
-
-	*ret = buffer;
-	return 0;
 }
 
 unsigned long long GetFileSize(char *pre_expanded_path)
@@ -285,7 +251,7 @@ int GetNextMessage(int fd, raw_msg* msg)
 	ret = ReceiveDataFromSocket(fd, (char*)msg, sizeof(raw_msg), 1);
 	if ((0 == msg->code) || (msg->magic != MSG_MAGIC))
 	{
-		cout << "Malformed message. Aborting" << endl;
+		//cout << "Malformed message. Aborting" << endl;
 		return -1;
 	}
 	return ret;

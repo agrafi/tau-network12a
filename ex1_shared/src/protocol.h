@@ -125,16 +125,6 @@ typedef struct {
 typedef msg_data_get_attachment_respose msg_data_attachment_field;
 
 typedef struct {
-	unsigned int mail_id;
-	unsigned int sender_len;
-	unsigned int subject_len;
-	unsigned int num_of_attachments;
-	// followed by variable length data:
-	// multiple fields with sender structure
-	// field with subject structure
-} msg_data_show_inbox_response_record;
-
-typedef struct {
 	unsigned int mail_len;
 } msg_data_get_mail_response;
 
